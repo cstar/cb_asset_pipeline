@@ -33,7 +33,7 @@ Don't forget to add asset_pipeline to the list of applications Chicago Boss shou
       {path, "<path to boss>"},
       {applications, [<your app>, cb_admin, asset_pipeline]},
 
-Finally add the asset tags to your custome tags (in `src/view/lib/tag_modules/<app>_custom_tags.erl`) :
+Finally add the asset tags to your custom tags (in `src/view/lib/tag_modules/<app>_custom_tags.erl`) :
 
 ```erlang
 javascript(Variables, Options) ->
