@@ -1,6 +1,6 @@
 # Asset Compiler for Chicago Boss
 
-This document is a work in progress.
+This document is a work in progress and the code is not finished yet.
 
 ## What does it do ?
 
@@ -23,7 +23,7 @@ For embbeding, add the following to your application boss.config file :
         {dummy, true}
     ]}.
 
-
+TODO (embedding instructions are not finished yet)
 
 ## Current state of affairs
 
@@ -36,4 +36,8 @@ Clone the repo, edit boss.config, I'm pretty sure you'll need to fix the Chicago
     init-dev.sh
 
 
-And visit http://localhost:8001/assets/home
+And visit [http://localhost:8001/assets/home](http://localhost:8001/assets/home).
+
+In your favorite browser inspector, you'll see that the javascript is served first with a `.raw.js` extension without caching headers. But this first request will trigger compression, concatenation and minification, so on the next reload, you'll have `application.a8236b610331fc51b5fec62474325970.js` served, with the correct headers.
+
+Included is also the asset watcher which will reload assets as files are modified.
