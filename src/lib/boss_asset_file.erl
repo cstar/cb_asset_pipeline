@@ -3,44 +3,72 @@
 -behaviour(gen_server).
 -export([start_link/1]).
 
--export([contents/1, urls/2]).
+-export([contents/1, urls/1, compressed/1, path/1]).
 
--export([get_deps/2, test/0]).
+-export([get_deps/2]).
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
    terminate/2, code_change/3]).
 
--record (state, {content, filename, type, compressed, deps=[]}).
+-record (state, {file_content, hash=nil, content = nil, fullpath, filename, type, compressed=nil, deps=[]}).
 
 start_link(File) -> 
   gen_server:start_link(?MODULE, [File], []).
 
-init([File]) -> 
-  Type = file_to_type(File),
-  Filename = filename:join([boss_files:root_priv_dir(asset_pipeline), "assets", Type, File]),
-  case file:read_file(Filename) of
-    {ok, Content} ->
-      {ok, #state{type = Type, filename = File, content = Content, deps = get_deps(Type, Content)}};
-    {error, Error} ->
-      {stop, Error}
-    end.
+path(Pid)->
+  gen_server:call(Pid, path).
 
-urls(Pid, Development)->
-  gen_server:call(Pid, {urls, Development}).
+urls(Pid)->
+  gen_server:call(Pid, urls).
 
 contents(Pid)->
   gen_server:call(Pid, content).
 
-handle_call(content, _From, State = #state{content = Content, deps = Deps})->
-  %AssetContent = lists:map(fun(Dep)->
-  %  Pid = boss_assets_sup:asset_proc(Dep), 
-  %  contents(Pid)
-  %end, Deps) ++ [Content],
-  AssetContent = Content,
-  {reply, {ok, AssetContent, []}, State };
+compressed(Pid)->
+  gen_server:call(Pid, compressed).
 
-handle_call({urls, Development}, _From, State = #state{deps = Deps, filename = Filename, type=Type})->
-  Filenames = Deps ++ [Filename],
+init([File]) -> 
+  Type = file_to_type(File),
+  App = boss_env:get_env(asset_pipeline, assets_for, asset_pipeline),
+  FilePath= filename:join([boss_files:root_priv_dir(App), "assets", Type, File]),
+  case file:read_file(FilePath) of
+    {ok, Content} ->
+      {ok, #state{type = Type, fullpath = FilePath, filename = File, file_content = maybe_minify(Type,Content), deps = get_deps(Type, Content)}};
+    {error, Error} ->
+      {stop, Error}
+    end.
+
+handle_call(path, _From, State = #state{fullpath=FilePath})->
+  {reply, FilePath, State};
+
+handle_call(compressed, _From, State = #state{file_content = Content, compressed=nil, deps = Deps})->
+  AssetContent = get_content(Content, Deps),
+  Hash = hash(AssetContent, State),
+  CompressedAsset = zlib:gzip(AssetContent),
+  {reply, {ok, CompressedAsset, [{'content-encoding', "gzip"}]}, State#state{ compressed=CompressedAsset, hash = Hash}};
+
+handle_call(compressed, _From, State = #state{compressed=CompressedAsset})->
+  {reply, {ok, CompressedAsset, [{'content-encoding', "gzip"}]}, State};
+
+handle_call(content, _From, State = #state{file_content = Content, content = nil, deps = Deps})->
+  AssetContent = get_content(Content, Deps),
+  Hash = hash(AssetContent, State),
+  {reply, {ok, AssetContent, []}, State#state{content = AssetContent, hash=Hash} };
+
+handle_call(content, _From, State = #state{ content = AssetContent })->
+  {reply, {ok, AssetContent, []}, State};
+
+handle_call(urls, _From, State = #state{deps = Deps, filename = Filename})->
+  Filenames = case should(concatenate) of
+    false ->
+      lists:map(fun(Dep)->
+        Pid = boss_assets_sup:asset_proc(Dep), 
+        {ok, DepFilenames} = urls(Pid),
+        DepFilenames
+      end, Deps) ++ [get_served_filename(State)];
+    true ->
+      [get_served_filename(State)]
+    end,
   {reply, {ok, Filenames}, State};
 
 handle_call(_Request, _From, State) -> {reply, ok, State}.
@@ -49,15 +77,47 @@ handle_info(_Info, State) -> {noreply, State}.
 terminate(_Reason, _State) -> ok.
 code_change(_OldVsn, State, Extra) -> {ok, State}.
 
+
+get_served_filename(State = #state{filename = Filename, hash = nil}) ->
+  [Ext | Rest ] = lists:reverse(string:tokens(Filename, ".")),
+  Name = string:join(lists:reverse(Rest), "."),  
+  lists:flatten([Name, $., "raw", $., Ext]);
+
+get_served_filename(State = #state{filename = Filename, hash = Hash}) ->
+  [Ext | Rest ] = lists:reverse(string:tokens(Filename, ".")),
+  Name = string:join(lists:reverse(Rest), "."),  
+  lists:flatten([Name, $., Hash, $., Ext]).
+
+
+get_content(Content, Deps)->
+  case should(concatenate) of
+    true ->
+      lists:map(fun(Dep)->
+        Pid = boss_assets_sup:asset_proc(Dep), 
+        {ok, DepContent, _Header} = contents(Pid),
+        DepContent
+      end, Deps) ++ [Content];
+    false ->
+      Content
+  end.
+
+maybe_minify(javascript, Content)->
+  case should(minify) of 
+    true ->
+      list_to_binary(min_js(binary_to_list(Content), []));
+    false ->
+      Content
+  end.
+
 file_to_type(Filename)->
   case tl(string:tokens(Filename, ".")) of
     ["js"] ->
-      "javascript";
+      javascript;
     ["css"] ->
-      "stylesheet"
+      stylesheet
   end.
 
-get_deps("javascript", Contents)->
+get_deps(javascript, Contents)->
   {ok, MP} = re:compile("//[[:space:]]*require[[:space:]]*(.*)", []),
   case re:run(Contents, MP, [{capture, all_but_first, list}, global]) of
     nomatch ->
@@ -66,11 +126,21 @@ get_deps("javascript", Contents)->
       [Filename || [Filename] <- List]
   end.
 
-test()->
-  Filename = filename:join([boss_files:root_priv_dir(asset_pipeline), "assets", "javascript", "application.js"]),
-  {ok, Contents} = file:read_file(Filename),
-  get_deps("javascript",Contents).
+hash(Content, State = #state{ hash=nil})->
+  <<X:128/big-unsigned-integer>> = erlang:md5(Content),
+  lists:flatten(io_lib:format("~32.16.0b", [X]));
 
+hash(Content, State = #state{hash=Hash})->
+  Hash.
+
+should(Option)->
+  App = boss_env:get_env(asset_pipeline, assets_for, asset_pipeline),
+  case boss_env:get_env(asset_pipeline, Option, production) of
+    production ->
+      not boss_env:is_developing_app(App);
+    Boolean ->
+      Boolean
+  end.
 
 %% jsmin in Erlang
 %% <http://javascript.crockford.com/jsmin.html>
