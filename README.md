@@ -1,4 +1,4 @@
-# Asset Compiler for Chicago Boss
+# Asset Pipeline for Chicago Boss
 
 This document is a work in progress and the code is not finished yet.
 
@@ -58,7 +58,7 @@ In your JS files, require other JS files :
 
 `require_tree` is not supported at this time.
 
-Start your app, and bingo your website make [Steve Souders](http://www.stevesouders.com) proud.
+Start your app, and make [Steve Souders](http://www.stevesouders.com) proud!
 
 ## Current state of affairs
 
@@ -80,6 +80,19 @@ And visit [http://localhost:8001/assets/home](http://localhost:8001/assets/home)
 In your favorite browser inspector, you'll see that the javascript is served first with a `.raw.js` extension without caching headers. But this first request will trigger compression, concatenation and minification, so on the next reload, you'll have `application.a8236b610331fc51b5fec62474325970.js` served, with the correct headers.
 
 Included is also the asset watcher which will automatically reload assets as files are modified.
+
+## Future plans
+
+Add support for stylesheets and images.
+
+Add `require_tree` and other unsupported keywords.
+
+Pass assets through the DTL compiler
+
+Add support for less, sass and coffeescript.
+
+Automatically deploy assets to S3/CloudFront and serve them transparently.
+
 
 ## Author
 
