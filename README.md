@@ -18,7 +18,6 @@ For embbeding, add the following to your application boss.config file along with
 
 ```erlang
 { asset_pipeline, [
-  {path, "../asset_pipeline"},
   {base_url, "/assets"},
   {assets_for, <YOUR APP>},
   {concatenate, true}, % Values are true, false, and production (production is the default)
