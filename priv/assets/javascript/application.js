@@ -1,5 +1,5 @@
 // require test1.js
-console.log("hello worssfdsddfsdfsdflsd");
+console.log("hello world");
 /*  This work is licensed under Creative Commons GNU LGPL License.
 
   License: http://creativecommons.org/licenses/LGPL/2.1/

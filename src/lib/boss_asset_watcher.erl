@@ -27,7 +27,7 @@ handle_call(_Request, _From, State) -> {reply, ok, State}.
 handle_cast(_Msg, State) -> {noreply, State}.
 
 handle_info(watch, Dict) -> 
-  Assets = boss_assets_sup:files_to_monitor() -- [?MODULE],
+  Assets = boss_assets:list(),
   {Dict2, ShouldReload} = lists:foldl(
     fun(File, {OldDict, SR})->
       {ok, FileInfo} = file:read_file_info(File, [{time, posix}]),
@@ -39,14 +39,14 @@ handle_info(watch, Dict) ->
           {dict:store(File, Mtime, OldDict), SR}
       end
     end, {Dict, false}, Assets),
-  maybe_restart_assets(ShouldReload),
+  maybe_clean(ShouldReload),
   timer:send_after(?INTERVAL, watch), 
   {noreply, Dict2}.
 
 terminate(_Reason, _State) -> ok.
 code_change(_OldVsn, State, Extra) -> {ok, State}.
 
-maybe_restart_assets(false) -> ok;
-maybe_restart_assets(true) -> 
+maybe_clean(false) -> ok;
+maybe_clean(true) -> 
   error_logger:info_msg("Assets have changed. Killing all assets"),
-  boss_assets_sup:kill().
+  boss_assets:clean().

@@ -3,8 +3,7 @@
 
 javascript(Variables, _Options) ->
   Src = proplists:get_value(src, Variables),
-  Pid = boss_assets_sup:asset_proc( binary_to_list(Src)),
-  {ok, Paths} = boss_asset_file:urls(Pid),
+  Paths = boss_assets:urls(binary_to_list(Src)),
   [[<<"<script type=\"text/javascript\" src=\"/assets/">>, Path, <<"\"></script>">>] || Path <- Paths ].
 
 %stylesheet(Variables, Options)->

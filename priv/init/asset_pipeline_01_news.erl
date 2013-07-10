@@ -6,7 +6,8 @@
 % return a list of WatchIDs that should be cancelled in the stop
 % function below (stop is executed if the script is ever reloaded).
 init() ->
-  boss_assets_sup:start_link(),
+  boss_asset:start(),
+  boss_asset_watcher:start_link(),
   {ok, []}.
 
 stop(ListOfWatchIDs) ->
